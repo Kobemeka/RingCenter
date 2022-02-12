@@ -10,6 +10,24 @@ import argparse
 def transpose(list_):
     return list(zip(*list_))
 
+def isInTol(value,target,tol):
+    return target - tol <= value <= target + tol
+
+def distance(p1,p2):
+    return np.sqrt(np.power(p1.x - p2.x,2) + np.power(p1.y - p2.y,2))
+
+def rotateInRange(molecule,rotation_point,axis,rrange,dt):
+    
+    n = drange//dt
+    molecule_states = []
+
+    for delta in range(n):
+
+        molecule = molecule.rotate(rotation_point,axis,dt)
+
+        molecule_states.append(molecule)
+    return molecule_states
+
 class Point:
     '''
         Creates a point in 3D
@@ -99,6 +117,7 @@ class Molecule:
         pass
 
     def translation(self,axis,delta):
+
         if axis == "x":
             translation_point = Point(0,delta,0,0)
         
@@ -107,18 +126,15 @@ class Molecule:
         elif axis == "z":
             translation_point = Point(0,0,0,delta)
 
-
         for atom_index, atom in enumerate(self.atoms):
             atom.coordinate += translation_point
 
         for ring in self.rings:
-            # ring.geometric_center.coordinate += translation_point
-            # ring.center_of_mass.coordinate += translation_point
             
             for ring_atom in ring.atoms:
                 ring_atom.coordinate += translation_point
             ring.calculate()
-
+        return self
 
     def rotate(self,rotation_point: Point, rotation_axis, rotation_angle):
         if rotation_axis == "x":
@@ -139,49 +155,54 @@ class Molecule:
                 [np.sin(rotation_angle), np.cos(rotation_angle),0],
                 [0, 0, 1]
             ])
+            
+        for atom_index, atom in self.atoms:
+            atom_dist = atom.coordinate - rotation_point # atom to rotation point distance
+
+            atom.coordinate = Point(
+                    atom.coordinate.point_id,
+                    *np.matmul(rotation_matrix, atom_dist.to_list().T)
+                    )
 
         for ring in self.rings:
-            # gcoord = ring.geometric_center.coordinate
-            # cmcoord = ring.center_of_mass.coordinate
-
-            # geo_dist = gcoord - rotation_point
-            # cm_dist = cmcoord - rotation_point
-
-            # new_geo_coord = np.matmul(rotation_matrix, geo_dist.to_list().T)
-            # ring.geometric_center.coordinate = Point(
-            #     ring.geometric_center.coordinate.point_id,
-            #     *new_geo_coord
-            #     )
-            # new_cm_coord = np.matmul(rotation_matrix, cm_dist.to_list().T)
-            # ring.center_of_mass.coordinate = Point(
-            #     ring.center_of_mass.coordinate.point_id,
-            #     *new_cm_coord
-            #     )
-
+            
             for ring_atom in ring.atoms:
-                a2rp_dist = ring_atom.coordinate - rotation_point # atom to rotation point distance
+                ring_atom_dist = ring_atom.coordinate - rotation_point # atom to rotation point distance
                 ring_atom.coordinate = Point(
                     ring_atom.coordinate.point_id,
-                    *np.matmul(rotation_matrix, a2rp_dist.to_list().T)
+                    *np.matmul(rotation_matrix, ring_atom_dist.to_list().T)
                     )
 
             ring.calculate()
+        return self
+    
+    def translateCheck(self,graphene,trange,dr):
+    
+        n = int(trange//dr)
+        cmdists = []
+        for ydelta in range(n):
+            self.translation("y",dr)
+            for xdelta in range(n):
+                self.translation("x",dr)
+                cmdists.append([(ydelta,xdelta),self.centerAtomsDist(graphene)])
+
+        return cmdists
+
+    def centerAtomsDist(self,graphene):
+        gatoms = graphene.atoms
+
+        cm_dists = [] # distances of center of mass to atoms
+        for ring in self.rings:
+            cm = ring.center_of_mass
+            for atom in gatoms:
+                cm_dists.append(distance(cm.coordinate,atom.coordinate))
+        return cm_dists
     def draw(self,ax):
         '''
             Draw molecule rings.
         '''
         ax.set_title(self.file_path)
         _ = [r.draw(ax) for r in self.rings]
-        # for t in range(len(self.ccombinations)):
-        #     c1 = self.ccombinations[t][0]
-        #     c2 = self.ccombinations[t][1]
-        #     dist = distance(c1.coordinate.xyz,c2.coordinate.xyz)
-
-        #     if in_tolerance(dist,self.explen,self.tolerance) and self.kwargs["show_center_distance"]:
-        #         ax.plot([c1.coordinate.x,c2.coordinate.x],[c1.coordinate.y,c2.coordinate.y],color = "g")
-        #         if self.kwargs["show_center_distance_text"]:
-        #             mftext = ax.text((c1.coordinate.x+c2.coordinate.x)/2,(c1.coordinate.y+c2.coordinate.y)/2,f"C{c1.id} - C{c2.id} -> {dist}")
-        #             mftext.set_bbox(dict(facecolor='green', alpha = textbox_alpha, edgecolor='green'))
 class Atom:
     '''
         Creates an atom.
@@ -204,8 +225,6 @@ class DummyAtom(Atom):
 
     def __repr__(self):
         return f"Dummy Atom: {self.atom_id}, {self.symbol}"
-    
-
 
 class Ring:
     def __init__(self,ring_id:int,atoms:list,**kwargs):
@@ -291,19 +310,30 @@ if __name__ == "__main__":
     if args.draw_file:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        # fig, ax = plt.subplots()
+        
         ax.set_xlabel("X - AXIS")
         ax.set_ylabel("Y - AXIS")
         ax.set_zlabel("Z - AXIS")
 
-        graphene.draw(ax)
-
-        # mf.draw(ax)
-
-        mf.translation("z",1)
-
-        # mf.rotate(Point(0,0,0,0),"z",np.pi/4)
+        # graphene.draw(ax)
 
         mf.draw(ax)
+
+        # nm = mf.translation("z",1)
+        # nm.draw(ax)
+
+        # print(type(nm))
+        
+        # mf.rotate(Point(0,0,0,0),"z",np.pi/4)
+        # xtranslations = mf.translateInRange("x", 1,0.1)
+        # for molf in xtranslations:
+            # print(molf)
+            # molf.draw(ax)
+        # xtranslations[0].draw(ax)
+        # print(len(xtranslations))
+        # [mol_.draw(ax) for mol_ in xtranslations]
+        # mf.draw(ax)
+        cmds = mf.translateCheck(graphene,1,0.1)
+        print(cmds)
         plt.show()
 
