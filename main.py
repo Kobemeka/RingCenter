@@ -33,6 +33,9 @@ class Point:
         else:
             return self.__add__(other)
     
+    def __sub__(self, other):
+        return Point(self.point_id, self.x - other.x, self.y - other.y, self.z - other.z)
+    
     def to_list(self):
         '''
             Returns a 1D numpy array: [x,y,z]
@@ -104,13 +107,65 @@ class Molecule:
         elif axis == "z":
             translation_point = Point(0,0,0,delta)
 
+
         for atom_index, atom in enumerate(self.atoms):
             atom.coordinate += translation_point
 
-        # for ring_index, ring in enumerate(self.rings):
-        #     for ring_atom in enumerate(ring.atoms):
-        #         ring_atom.coordinate += translation_point
+        for ring in self.rings:
+            # ring.geometric_center.coordinate += translation_point
+            # ring.center_of_mass.coordinate += translation_point
             
+            for ring_atom in ring.atoms:
+                ring_atom.coordinate += translation_point
+            ring.calculate()
+
+
+    def rotate(self,rotation_point: Point, rotation_axis, rotation_angle):
+        if rotation_axis == "x":
+            rotation_matrix = np.array([
+                [1, 0, 0],
+                [0, np.cos(rotation_angle), -np.sin(rotation_angle)],
+                [0, np.sin(rotation_angle), np.cos(rotation_angle)]
+            ])
+        elif rotation_axis == "y":
+            rotation_matrix = np.array([
+                [np.cos(rotation_angle), 0, np.sin(rotation_angle)],
+                [0, 1, 0],
+                [-np.sin(rotation_angle), 0, np.cos(rotation_angle)]
+            ])
+        elif rotation_axis == "z":
+            rotation_matrix = np.array([
+                [np.cos(rotation_angle), -np.sin(rotation_angle),0],
+                [np.sin(rotation_angle), np.cos(rotation_angle),0],
+                [0, 0, 1]
+            ])
+
+        for ring in self.rings:
+            # gcoord = ring.geometric_center.coordinate
+            # cmcoord = ring.center_of_mass.coordinate
+
+            # geo_dist = gcoord - rotation_point
+            # cm_dist = cmcoord - rotation_point
+
+            # new_geo_coord = np.matmul(rotation_matrix, geo_dist.to_list().T)
+            # ring.geometric_center.coordinate = Point(
+            #     ring.geometric_center.coordinate.point_id,
+            #     *new_geo_coord
+            #     )
+            # new_cm_coord = np.matmul(rotation_matrix, cm_dist.to_list().T)
+            # ring.center_of_mass.coordinate = Point(
+            #     ring.center_of_mass.coordinate.point_id,
+            #     *new_cm_coord
+            #     )
+
+            for ring_atom in ring.atoms:
+                a2rp_dist = ring_atom.coordinate - rotation_point # atom to rotation point distance
+                ring_atom.coordinate = Point(
+                    ring_atom.coordinate.point_id,
+                    *np.matmul(rotation_matrix, a2rp_dist.to_list().T)
+                    )
+
+            ring.calculate()
     def draw(self,ax):
         '''
             Draw molecule rings.
@@ -157,9 +212,11 @@ class Ring:
         self.ring_id = ring_id
         self.atoms = atoms
         self.kwargs = kwargs
+        self.calculate()
+
+    def calculate(self):
 
         self.atoms_coordinates = np.array([atom.coordinate.to_list() for atom in self.atoms])
-
         self.atoms_mass = np.array([atom.mass for atom in self.atoms])
         self.total_mass = sum(self.atoms_mass)
         self.center_of_mass = DummyAtom(
@@ -202,7 +259,7 @@ if __name__ == "__main__":
     parser.add_argument("--atom_number",default=False)
     parser.add_argument("--ring",default=True)
     parser.add_argument("--ring_atoms",default=False)
-    parser.add_argument("--ring_center",default=False)
+    parser.add_argument("--ring_center",default=True)
     parser.add_argument("--ring_center_of_mass",default=True)
     parser.add_argument("--dump_center_info",default=False)
     parser.add_argument("--draw_file",default=True)
@@ -226,6 +283,7 @@ if __name__ == "__main__":
     }
 
     mf = Molecule(args.file,**show_settings)
+    graphene = Molecule("./mol_files/graphene.mol",**show_settings)
 
     if args.dump_center_info:
         mf.dump()
@@ -237,8 +295,15 @@ if __name__ == "__main__":
         ax.set_xlabel("X - AXIS")
         ax.set_ylabel("Y - AXIS")
         ax.set_zlabel("Z - AXIS")
-        mf.draw(ax)
-        mf.translation("x",1)
+
+        graphene.draw(ax)
+
+        # mf.draw(ax)
+
+        mf.translation("z",1)
+
+        # mf.rotate(Point(0,0,0,0),"z",np.pi/4)
+
         mf.draw(ax)
         plt.show()
 
