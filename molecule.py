@@ -2,7 +2,9 @@ from rdkit import Chem
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-import argparse
+from matplotlib import cm
+from copy import deepcopy
+from fractions import Fraction
 
 def transpose(list_):
     return list(zip(*list_))
@@ -45,7 +47,7 @@ class Point:
         '''
         return np.array([self.x,self.y,self.z])
 
-class Molecule:
+class MolFile:
     '''
         Creates a molecule from a mol file and find rings.
         Takes file_path (path of the mol file) as parameter.
@@ -110,6 +112,7 @@ class Molecule:
     def prepare(self):
         # we do not know how the molecule is positioned initially
         # to calculate the best we need to center the molecule to origin
+        # TODO: consider implementing this function in Molecule class not MolFile
         # TODO: handle rotation
 
         for atom_index, atom in enumerate(self.atoms):
@@ -120,6 +123,11 @@ class Molecule:
             for ring_atom in ring.atoms:
                 ring_atom.coordinate -= self.center_of_mass.coordinate
             ring.calculate()
+
+class Molecule:
+    def __init__(self,atoms,rings) -> None:
+        self.atoms = atoms
+        self.rings = rings
 
     def energy(self):
         pass
@@ -135,17 +143,21 @@ class Molecule:
         elif axis == "z":
             translation_point = Point(0,0,0,delta)
 
-        for atom_index, atom in enumerate(self.atoms):
+        new_atoms = deepcopy(self.atoms)
+        new_rings = deepcopy(self.rings)
+
+
+        for atom in new_atoms:
             atom.coordinate += translation_point
 
-        for ring in self.rings:
+        for ring in new_rings:
             
             for ring_atom in ring.atoms:
                 ring_atom.coordinate += translation_point
             ring.calculate()
-        return self
+        return Molecule(new_atoms,new_rings)
 
-    def rotate(self,rotation_point: Point, rotation_axis, rotation_angle):
+    def rotation(self,rotation_point: Point, rotation_axis, rotation_angle):
         ''' rotates the molecule in given axis by a rotation angle around a point.'''
         if rotation_axis == "x":
             rotation_matrix = np.array([
@@ -165,8 +177,11 @@ class Molecule:
                 [np.sin(rotation_angle), np.cos(rotation_angle),0],
                 [0, 0, 1]
             ])
-            
-        for atom_index, atom in self.atoms:
+
+        new_atoms = deepcopy(self.atoms)
+        new_rings = deepcopy(self.rings)
+
+        for atom in new_atoms:
             atom_dist = atom.coordinate - rotation_point # atom to rotation point distance
 
             atom.coordinate = Point(
@@ -174,7 +189,7 @@ class Molecule:
                     *np.matmul(rotation_matrix, atom_dist.to_list().T)
                     )
 
-        for ring in self.rings:
+        for ring in new_rings:
             
             for ring_atom in ring.atoms:
                 ring_atom_dist = ring_atom.coordinate - rotation_point # atom to rotation point distance
@@ -184,64 +199,64 @@ class Molecule:
                     )
 
             ring.calculate()
-        return self
-    
-    def bestTranslation(self,graphene,trange,dr):
-        ''' apply translations to the molecule in a given range and the step in both axis (x, y)
-            then returns the distances with the number of translations: [(y,x), distance]
-        '''
-    
-        n = int(trange//dr)
-        cmdists = []
-        for ydelta in range(n):
-            self.translation("y",dr)
-            for xdelta in range(n):
-                self.translation("x",dr)
-                cmd = [(ydelta,xdelta),self.centerAtomsDist(graphene)]
-                # print(cmd)
-                cmdists.append(cmd)
+        return Molecule(new_atoms,new_rings)
 
-        return min(cmdists,key=lambda x: x[1]) # TODO: maybe change the min function.
+    def translation2d(self,translation_range,delta):
+    
+        # n = int(translation_range//delta)
+        n = Fraction(translation_range) // Fraction(delta)
+        translated_molecules = []
+
+        for ydelta in range(n):
+            ydist = delta * ydelta
+            ytranslation = self.translation("y", ydist)
+            for xdelta in range(n):
+                xdist = delta * xdelta
+                xtranslation = ytranslation.translation("x", xdist)
+                translated_molecules.append([(xdist,ydist),xtranslation])
+
+        return translated_molecules
+    def averageMinDistGraph(self,graphene,translation_range,delta,ax):
+
+        n = Fraction(str(float(translation_range))) // Fraction(str(float(delta)))
+
+        avgdst = []
+
+        vals = np.arange(0,translation_range,delta)
+        xvals, yvals = np.meshgrid(vals,vals)
+
+        for ydelta in range(n):
+            ydist = delta * ydelta
+            ytranslation = self.translation("y", ydist)
+            yds = []
+            for xdelta in range(n):
+                xdist = delta * xdelta
+                xtranslation = ytranslation.translation("x", xdist)
+                yds.append(xtranslation.getAverageMinDist(graphene))
+            avgdst.append(yds)
+        ax.plot_surface(xvals,yvals,np.array(avgdst),cmap=cm.coolwarm)
 
     def getBestTranslation(self,graphene,trange,dr):
-        self.create() # reset all translations and rotations
-        best = self.bestTranslation(graphene,trange,dr) # find best translation
-        self.create() # reset again
-        # get the best number of translation in y axis (best[0][0]) and multiply with the step (dr) to translate to best position
-        self.translation("y",best[0][0] * dr)
-        # get the best number of translation in x axis (best[0][1]) and multiply with the step (dr) to translate to best position
-        self.translation("x",best[0][1] * dr)
-        return best
+        return min(self.translation2d(trange,dr),key = lambda e: e[1].getAverageMinDist(graphene))
+    
+    def getAverageMinDist(self,graphene):
+        return np.array(self.centerAtomsDist(graphene)).mean()
         
     def recursiveBestTranslation(self,graphene,trange,dr,recursion_size):
-        # TODO: optimize and re think it
+        # TODO: reimplement it with new method or create a new function with new method
 
-        self.create()
-        recrange = trange
-        delta = dr
-        bests = []
+        temp_molecule = self.translation("x",0)
+        mem = []
         for r in range(recursion_size):
-            best = self.bestTranslation(graphene,recrange,delta)
-            # self.create()
-            self.translation("y",(best[0][0] - 1) * delta)
-            self.translation("x",(best[0][1] - 1) * delta)
-            bests.append([best[0],recrange,delta])
-            recrange /= 5
-            delta /= 10
-        return bests
+            best = temp_molecule.getBestTranslation(graphene,trange,dr)
+            # mem.append(["best: ", best[0]])
+            mem.append([*best[0]])
+            temp_molecule = self.translation("x",best[0][0] - dr/2).translation("y",best[0][1] - dr/2)
+            mem.append([best[0][0] - dr/2, best[0][1] - dr/2])
+            trange /= 10
+            dr /= 10
+        return mem
 
-    # TODO: implement for rotation
-    # def rotateInRange(molecule,rotation_point,axis,rrange,dt):
-        
-    #     n = drange//dt
-    #     molecule_states = []
-
-    #     for delta in range(n):
-
-    #         molecule = molecule.rotate(rotation_point,axis,dt)
-
-    #         molecule_states.append(molecule)
-    #     return molecule_states
     def centerAtomsDist(self,graphene):
         ''' returns the miniumum distances of center of mass of rings to graphene atoms.'''
 
@@ -258,7 +273,7 @@ class Molecule:
         '''
             Draw molecule rings.
         '''
-        ax.set_title(self.file_path)
+        # ax.set_title(self.file_path)
         _ = [r.draw(ax) for r in self.rings]
 class Atom:
     '''
@@ -320,6 +335,7 @@ class Ring:
             self.center_of_mass.draw(ax,atom_color="blue")
 
         if self.kwargs["show_ring"]:
-
+            if "ring_color" not in self.kwargs:
+                self.kwargs["ring_color"] = "k"
             rings_xyz = transpose(np.concatenate((self.atoms_coordinates,[self.atoms_coordinates[0]])))
-            ax.plot(rings_xyz[0],rings_xyz[1],rings_xyz[2],"k")
+            ax.plot(rings_xyz[0],rings_xyz[1],rings_xyz[2],self.kwargs["ring_color"])
