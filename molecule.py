@@ -203,8 +203,7 @@ class Molecule:
 
     def translation2d(self,translation_range,delta):
     
-        # n = int(translation_range//delta)
-        n = Fraction(translation_range) // Fraction(delta)
+        n = Fraction(str(float(translation_range))) // Fraction(str(float(delta)))  # FIXME: maybe add 1? it does not cover the end point
         translated_molecules = []
 
         for ydelta in range(n):
@@ -216,7 +215,20 @@ class Molecule:
                 translated_molecules.append([(xdist,ydist),xtranslation])
 
         return translated_molecules
-    def averageMinDistGraph(self,graphene,translation_range,delta,ax):
+    
+    def rotationZ(self,center,rrange,delta):
+        # ?: center should be the center of mass of this molecule
+
+        n = Fraction(str(float(rrange))) // Fraction(str(float(delta))) # FIXME: maybe add 1? it does not cover the end point
+        rotated_molecules = []
+        for r in range(n):
+            rotation_angle = delta * r
+            zrotation = self.rotation(center,"z",rotation_angle) # rotate around origin
+            rotated_molecules.append([rotation_angle,zrotation])
+        return rotated_molecules
+
+
+    def averageMinDistTranslationGraph(self,graphene,translation_range,delta,ax):
 
         n = Fraction(str(float(translation_range))) // Fraction(str(float(delta)))
 
@@ -235,6 +247,9 @@ class Molecule:
                 yds.append(xtranslation.getAverageMinDist(graphene))
             avgdst.append(yds)
         ax.plot_surface(xvals,yvals,np.array(avgdst),cmap=cm.coolwarm)
+
+    def getBestRotation(self,graphene,center,rrange,dr):
+        return min(self.rotationZ(center,rrange,dr),key = lambda e: e[1].getAverageMinDist(graphene))
 
     def getBestTranslation(self,graphene,trange,dr):
         return min(self.translation2d(trange,dr),key = lambda e: e[1].getAverageMinDist(graphene))
@@ -275,6 +290,7 @@ class Molecule:
         '''
         # ax.set_title(self.file_path)
         _ = [r.draw(ax) for r in self.rings]
+
 class Atom:
     '''
         Creates an atom.
