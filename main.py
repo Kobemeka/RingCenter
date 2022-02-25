@@ -1,10 +1,13 @@
 from molecule import *
+import argparse
+import time
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    # parser.add_argument("--file", default = "./mol_files/polypyrrole.mol")
-    parser.add_argument("--file", default = "./mol_files/ppp24_new.mol")
+    parser.add_argument("--file", default = "./mol_files/polypyrrole.mol")
+    # parser.add_argument("--file", default = "./mol_files/pedot24_new.mol")
+    # parser.add_argument("--file", default = "./mol_files/ppp24_new.mol")
     parser.add_argument("--center_number",default=False)
     parser.add_argument("--center_distance",default=False)
     parser.add_argument("--center_distance_text",default=False)
@@ -34,9 +37,16 @@ if __name__ == "__main__":
         "tolerance": args.tolerance
     }
 
-    mf = Molecule(args.file,**show_settings)
+    mf = MolFile(args.file,**show_settings)
+    gf = MolFile("./mol_files/graphene_long.mol",**show_settings)
+    
+    molecule = Molecule(mf.atoms,mf.rings)
+    graphene = Molecule(gf.atoms,gf.rings)
 
-    graphene = Molecule("./mol_files/graphene_long.mol",**show_settings)
+    # translated_molecule = molecule.translation("x",10)
+
+    tr2d = molecule.translation2d(2,1)
+
 
     if args.dump_center_info:
         mf.dump()
@@ -49,18 +59,31 @@ if __name__ == "__main__":
         ax.set_ylabel("Y - AXIS")
         ax.set_zlabel("Z - AXIS")
 
-        # graphene.create()
-        graphene.draw(ax)
+        test_range = 2
+        test_d = 0.5
 
-        mf.draw(ax)
-        # mf.create()
-        # mf.draw(ax)
+        molecule.draw(ax)
+        # graphene.draw(ax)
+        # translated_molecule.draw(ax)
+        # [i[1].draw(ax) for i in tr2d]
 
-        # cmds = mf.translateCheck(graphene,1,0.1)
-        # print(cmds)
-        # gbt = mf.getBestTranslation(graphene,2,0.1)
-        # print("gbt: ", gbt)
-        rbt = mf.recursiveBestTranslation(graphene,2,0.1,2)
-        print(rbt)
-        mf.draw(ax)
+        # print(molecule.centerAtomsDist(graphene))
+
+        # besttr = molecule.getBestTranslation(graphene,test_range,test_d)
+        # ax.scatter(besttr[0][0],besttr[0][1])
+
+        # # print(besttr[0])
+        # # # besttr[1].draw(ax)
+        
+        # rbst = molecule.recursiveBestTranslation(graphene,test_range,test_d,4)
+        # print(rbst)
+        # ax.scatter([rbst[1][0] + rbst[2][0]],[rbst[1][1] + rbst[2][1]])
+
+        # molecule.averageMinDistGraph(graphene,test_range,test_d,ax)
+
+        # rotm = molecule.rotationZ(Point(0,0,0,0),np.pi/2,np.pi/10)
+        # [i[1].translation("z",2).draw(ax) for i in rotm]
+        gbr = molecule.getBestRotation(graphene,Point(0,0,0,0),np.pi/2,np.pi/20)
+        print(gbr[0])
+        gbr[1].translation("z",2).draw(ax)
         plt.show()
