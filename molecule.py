@@ -1,10 +1,17 @@
 from rdkit import Chem
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from copy import deepcopy
 from fractions import Fraction
+
+'''
+TODO!!: ntz ve bse dosyalarini duzelt
+TODO: Point id kaldirilabilir
+TODO: graphene, molekul ve best molecule icin farkli renklendirme -> FIXME: **kwargs
+TODO: ayni anda hem rotation hem translation yapan fonksiyon ve bunun recursive olani
+TODO: variable isimlerini daha anlasilir olanlarla degistir
+TODO: molekule gore graphene olustur
+'''
 
 def transpose(list_):
     return list(zip(*list_))
@@ -109,6 +116,7 @@ class MolFile:
         )
 
         self.prepare()
+
     def prepare(self):
         # we do not know how the molecule is positioned initially
         # to calculate the best we need to center the molecule to origin
@@ -203,7 +211,7 @@ class Molecule:
 
     def translation2d(self,translation_range,delta):
     
-        n = Fraction(str(float(translation_range))) // Fraction(str(float(delta)))  # FIXME: maybe add 1? it does not cover the end point
+        n = Fraction(str(float(translation_range))) // Fraction(str(float(delta))) + 1  
         translated_molecules = []
 
         for ydelta in range(n):
@@ -219,7 +227,7 @@ class Molecule:
     def rotationZ(self,center,rrange,delta):
         # ?: center should be the center of mass of this molecule
 
-        n = Fraction(str(float(rrange))) // Fraction(str(float(delta))) # FIXME: maybe add 1? it does not cover the end point
+        n = Fraction(str(float(rrange))) // Fraction(str(float(delta))) + 1
         rotated_molecules = []
         for r in range(n):
             rotation_angle = delta * r
@@ -230,7 +238,7 @@ class Molecule:
 
     def averageMinDistTranslationGraph(self,graphene,translation_range,delta,ax):
 
-        n = Fraction(str(float(translation_range))) // Fraction(str(float(delta)))
+        n = Fraction(str(float(translation_range))) // Fraction(str(float(delta))) + 1
 
         avgdst = []
 
@@ -261,17 +269,31 @@ class Molecule:
         # TODO: reimplement it with new method or create a new function with new method
 
         temp_molecule = self.translation("x",0)
-        mem = []
+        final_best = [0,0]
         for r in range(recursion_size):
             best = temp_molecule.getBestTranslation(graphene,trange,dr)
-            # mem.append(["best: ", best[0]])
-            mem.append([*best[0]])
             temp_molecule = self.translation("x",best[0][0] - dr/2).translation("y",best[0][1] - dr/2)
-            mem.append([best[0][0] - dr/2, best[0][1] - dr/2])
+            final_best[0] += best[0][0] - dr/2
+            final_best[1] += best[0][1] - dr/2
             trange /= 10
             dr /= 10
-        return mem
+        
+        final_best[0] += best[0][0]
+        final_best[1] += best[0][1]
+        return final_best, self.translation("x",final_best[0]).translation("y",final_best[1])
 
+    def recursiveBestRotation(self,graphene,center,rrange,delta,recursion_size):
+        temp_molecule = self.rotation(center,"z",0)
+        final_best = 0
+        for r in range(recursion_size):
+            best = temp_molecule.getBestRotation(graphene,center,rrange,delta)
+            temp_molecule = self.rotation(center,"z",best[0] - delta/2)
+            final_best += best[0] - delta/2
+            rrange /= 10
+            delta /= 10
+        
+        final_best += best[0]
+        return final_best, self.rotation(center,"z",final_best)
     def centerAtomsDist(self,graphene):
         ''' returns the miniumum distances of center of mass of rings to graphene atoms.'''
 
