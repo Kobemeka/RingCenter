@@ -132,5 +132,7 @@ dmypy.json
 # test files
 
 test.py
+test2.py
+*.old.py
 *.txt
 *.png
