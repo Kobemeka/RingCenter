@@ -1,9 +1,11 @@
 from rdkit import Chem
+from rdkit.Chem import rdMolTransforms
 import numpy as np
 from matplotlib import cm
 from copy import deepcopy
 from fractions import Fraction
-
+from datetime import datetime
+import transform
 '''
 TODO!!: ntz ve bse dosyalarini duzelt
 TODO: Point id kaldirilabilir
@@ -23,6 +25,20 @@ def isInTol(value, target, tol):
 
 def distance(p1, p2):
     return np.sqrt(np.power(p1.x - p2.x, 2) + np.power(p1.y - p2.y, 2))
+
+def createFinal(poly,graphene,dx,dy,drot):
+
+        rdMolTransforms.TransformConformer(poly.molecule.GetConformer(0), transform.transform(dx - poly.center_of_mass.coordinate.x,dy- poly.center_of_mass.coordinate.y,0,drot))
+        
+        rdMolTransforms.TransformConformer(graphene.molecule.GetConformer(0), transform.transform( - graphene.center_of_mass.coordinate.x, - graphene.center_of_mass.coordinate.y,0,0))
+       
+        poly_name = poly.file_path.split(".")[-2].split("/")[-1]
+        newFileName = f"./final_mol_files/{poly_name}_final_{datetime.now().strftime('%d_%m_%Y-%H_%M_%S')}.sdf"
+        writer = Chem.SDWriter(newFileName)
+        mol = Chem.rdmolops.CombineMols(graphene.molecule,poly.molecule)
+        writer.write(mol)
+        writer.close()
+        return newFileName
 
 class Point:
     '''
@@ -173,24 +189,8 @@ class Molecule:
 
     def rotation(self, rotation_point: Point, rotation_axis, rotation_angle):
         ''' rotates the molecule in given axis by a rotation angle around a point.'''
-        if rotation_axis == "x":
-            rotation_matrix = np.array([
-                [1, 0, 0],
-                [0, np.cos(rotation_angle), -np.sin(rotation_angle)],
-                [0, np.sin(rotation_angle), np.cos(rotation_angle)]
-            ])
-        elif rotation_axis == "y":
-            rotation_matrix = np.array([
-                [np.cos(rotation_angle), 0, np.sin(rotation_angle)],
-                [0, 1, 0],
-                [-np.sin(rotation_angle), 0, np.cos(rotation_angle)]
-            ])
-        elif rotation_axis == "z":
-            rotation_matrix = np.array([
-                [np.cos(rotation_angle), -np.sin(rotation_angle), 0],
-                [np.sin(rotation_angle), np.cos(rotation_angle), 0],
-                [0, 0, 1]
-            ])
+        
+        rotation_matrix = transform.xyzRotation(rotation_angle)[rotation_axis]
 
         new_atoms = deepcopy(self.atoms)
         new_rings = deepcopy(self.rings)

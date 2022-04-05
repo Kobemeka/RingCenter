@@ -136,3 +136,4 @@ test2.py
 *.old.py
 *.txt
 *.png
+final_mol_files/
