@@ -130,6 +130,7 @@ dmypy.json
 
 
 # test files
+/test-final/
 
 # test.py
 test2.py

@@ -8,10 +8,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    # parser.add_argument("--file", default = "./mol_files/NTZsadecepolymer-Corrected.mol")
+    parser.add_argument("--file", default = "./test-files/QA-B.mol")
+    # parser.add_argument("--file", default = "./mol_files/ntz.mol")
     # parser.add_argument("--file", default = "mol_files/bo.mol")
     # parser.add_argument("--file", default = "mol_files/a33.mol")
-    parser.add_argument("--file", default = "mol_files/bse.mol")
+    # parser.add_argument("--file", default = "mol_files/bse.mol")
     
     parser.add_argument("--center_number",default=False)
     parser.add_argument("--center_distance",default=False)
@@ -74,11 +75,11 @@ if __name__ == "__main__":
 
         test_range = 1.42
         test_rotation = np.pi/2
-        test_ratio = 10
+        test_ratio = 5
 
         
         gbtr = molecule.getBestTranslationRotation(graphene,test_range,test_rotation,test_range/test_ratio,test_rotation/test_ratio)
-        print(gbtr[0])
+        # print(gbtr[0])
         
         # graphene.draw(ax)
         # gbtr[1].draw(ax)
@@ -86,7 +87,7 @@ if __name__ == "__main__":
         '''
             STSRT FINAL SDF FILE
         '''
-        finalmol = createFinal(mf,gf,*gbtr[0])
+        finalmol = createFinal(mf,gf,*gbtr[0],"final-test-15")
         fmol = MolFile(finalmol,**show_settings)
         fm = Molecule(fmol.atoms,fmol.rings,fmol.center_of_mass)
         fm.draw(ax)

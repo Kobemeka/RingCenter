@@ -6,6 +6,7 @@ from copy import deepcopy
 from fractions import Fraction
 from datetime import datetime
 import transform
+import os
 '''
 TODO!!: ntz ve bse dosyalarini duzelt
 TODO: Point id kaldirilabilir
@@ -26,19 +27,23 @@ def isInTol(value, target, tol):
 def distance(p1, p2):
     return np.sqrt(np.power(p1.x - p2.x, 2) + np.power(p1.y - p2.y, 2))
 
-def createFinal(poly,graphene,dx,dy,drot):
+def createFinal(poly,graphene,dx,dy,drot,folder_name="final_mol_files"):
+    current_folder_name = f"./{folder_name}"
+    if not os.path.exists(current_folder_name):
+        os.mkdir(current_folder_name)
 
-        rdMolTransforms.TransformConformer(poly.molecule.GetConformer(0), transform.transform(dx - poly.center_of_mass.coordinate.x,dy- poly.center_of_mass.coordinate.y,0,drot))
-        
-        rdMolTransforms.TransformConformer(graphene.molecule.GetConformer(0), transform.transform( - graphene.center_of_mass.coordinate.x, - graphene.center_of_mass.coordinate.y,0,0))
-       
-        poly_name = poly.file_path.split(".")[-2].split("/")[-1]
-        newFileName = f"./final_mol_files/{poly_name}_final_{datetime.now().strftime('%d_%m_%Y-%H_%M_%S')}.sdf"
-        writer = Chem.SDWriter(newFileName)
-        mol = Chem.rdmolops.CombineMols(graphene.molecule,poly.molecule)
-        writer.write(mol)
-        writer.close()
-        return newFileName
+    # rdMolTransforms.TransformConformer(poly.molecule.GetConformer(0), transform.transform(dx - poly.center_of_mass.coordinate.x,dy- poly.center_of_mass.coordinate.y,0,drot))
+    rdMolTransforms.TransformConformer(poly.molecule.GetConformer(0), transform.transform(dx,dy,0,drot))
+    # print(f"poly transform {(dx - poly.center_of_mass.coordinate.x)=} {(dy - poly.center_of_mass.coordinate.y)=}")
+    # rdMolTransforms.TransformConformer(graphene.molecule.GetConformer(0), transform.transform( - graphene.center_of_mass.coordinate.x, - graphene.center_of_mass.coordinate.y,0,0))
+    
+    poly_name = poly.file_path.split(".")[-2].split("/")[-1]
+    newFileName = f"{current_folder_name}/{poly_name}_final_{datetime.now().strftime('%d_%m_%Y-%H_%M_%S')}.sdf"
+    writer = Chem.SDWriter(newFileName)
+    mol = Chem.rdmolops.CombineMols(graphene.molecule,poly.molecule)
+    writer.write(mol)
+    writer.close()
+    return newFileName
 
 class Point:
     '''
@@ -86,7 +91,7 @@ class MolFile:
         self.expected_distance = self.kwargs["expected_distance"]
         self.tolerance = self.kwargs["tolerance"]
 
-        self.molecule = Chem.MolFromMolFile(self.file_path)
+        self.molecule = Chem.MolFromMolFile(self.file_path,False)
 
         self.rdkit_atoms = list(self.molecule.GetAtoms())
         self.atoms_mass = [a.GetMass() for a in self.rdkit_atoms]
@@ -138,7 +143,7 @@ class MolFile:
             **self.kwargs
         )
 
-        self.prepare()
+        # self.prepare()
 
     def prepare(self):
         # we do not know how the molecule is positioned initially
@@ -161,6 +166,15 @@ class Molecule:
         self.atoms = atoms
         self.rings = rings
         self.center_of_mass = center_of_mass
+
+        for atom_index, atom in enumerate(self.atoms):
+            atom.coordinate -= self.center_of_mass.coordinate
+
+        for ring in self.rings:
+
+            for ring_atom in ring.atoms:
+                ring_atom.coordinate -= self.center_of_mass.coordinate
+            ring.calculate()
 
     def translation(self, axis, delta):
         ''' apply translation '''
