@@ -1,6 +1,9 @@
 from molecule import *
 import glob
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
+from writeMolFile import MolFileWriter
 
 show_settings = {
     "show_center_number":False,
@@ -28,29 +31,44 @@ graphene_settings = {
 }
 
 
-gf = MolFile("./mol_files/graphene-big-square.mol",**graphene_settings)
-graphene = Molecule(gf.atoms,gf.rings,gf.center_of_mass)
-print(f"{graphene.center_of_mass.coordinate=}")
-allMolFiles = [f for f in glob.glob("./test-files/*.mol")]
-for molfile in [allMolFiles[0]]:
-    print(molfile)
-    # print("="*24)
-    try:
+gf = MolFile("mol_files/graphene-piece.mol",**graphene_settings)
+graphene = Molecule(gf.atoms,gf.rings,gf.center_of_mass,gf.bonds_ids,True)
+allMolFiles = [f for f in glob.glob("./correct/*.mol")]
 
-        mf = MolFile(molfile,**show_settings)
+test_range = 2
+test_rotation = np.pi*2
+test_ratio = 15
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
 
-        molecule = Molecule(mf.atoms,mf.rings,mf.center_of_mass)
-        print(f"{molecule.center_of_mass.coordinate=}")
+molfile = "./correct/pth24.mol"
+molfileid = 0
+print("="*24)
+print(f"{molfileid}/{len(allMolFiles)}")
+print(molfile)
 
-        test_range = 1.42
-        test_rotation = np.pi/2
-        test_ratio = 10
+mf = MolFile(molfile,**show_settings)
 
-        gbtr = molecule.getBestTranslationRotation(graphene,test_range,test_rotation,test_range/test_ratio,test_rotation/test_ratio)
-        print(f"{gbtr=}")
-        finalmol = createFinal(mf,gf,*gbtr[0],"test-final")
-        # finalmol = createFinal(mf,gf,5,5,np.pi/2,"final-test")
-        print("="*10+"DONE"+"="*10)
+molecule = Molecule(mf.atoms,mf.rings,mf.center_of_mass,mf.bonds_ids,True)
 
-    except Exception as e:
-        print(f"{molfile} HATA!")
+gbtr = molecule.getBestTranslationRotation(graphene,test_range,test_rotation,test_range/test_ratio,test_rotation/test_ratio)
+
+writer = MolFileWriter([gbtr[1],graphene])
+writer.write(f"./final/{molfile.split('.')[-2].split('/')[-1]}-final-{test_ratio}.mol")
+print(" "*10+"DONE"+" "*10+"\n")
+print("="*24)
+# for molfileid, molfile in enumerate(allMolFiles):
+#     print("="*24)
+#     print(f"{molfileid}/{len(allMolFiles)}")
+#     print(molfile)
+
+#     mf = MolFile(molfile,**show_settings)
+
+#     molecule = Molecule(mf.atoms,mf.rings,mf.center_of_mass,mf.bonds_ids,True)
+
+#     gbtr = molecule.getBestTranslationRotation(graphene,test_range,test_rotation,test_range/test_ratio,test_rotation/test_ratio)
+
+#     writer = MolFileWriter([gbtr[1],graphene])
+#     writer.write(f"./final/{molfile.split('.')[-2].split('/')[-1]}-final-{test_ratio}.mol")
+#     print(" "*10+"DONE"+" "*10+"\n")
+#     print("="*24)

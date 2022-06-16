@@ -1,3 +1,4 @@
+from inspect import isgenerator
 from rdkit import Chem
 from rdkit.Chem import rdMolTransforms
 import numpy as np
@@ -16,7 +17,22 @@ TODO: variable isimlerini daha anlasilir olanlarla degistir
 TODO: molekule gore graphene olustur
 '''
 
+def convertBondType(t):
+    if t == 1.0:
+        return 1
+    elif t == 1.5:
+        return 4
+    elif t == 2.0:
+        return 2
+    elif t == 3.0:
+        return 3
 
+def isRingAromatic(mol, bondRing):
+    for id in bondRing:
+        if not mol.GetBondWithIdx(id).GetIsAromatic():
+            return False
+    return True
+        
 def transpose(list_):
     return list(zip(*list_))
 
@@ -27,16 +43,18 @@ def isInTol(value, target, tol):
 def distance(p1, p2):
     return np.sqrt(np.power(p1.x - p2.x, 2) + np.power(p1.y - p2.y, 2))
 
-def createFinal(poly,graphene,dx,dy,drot,folder_name="final_mol_files"):
+def createFinal(poly,graphene,dx,dy,drot,ax,folder_name="final_mol_files"):
     current_folder_name = f"./{folder_name}"
     if not os.path.exists(current_folder_name):
         os.mkdir(current_folder_name)
 
-    # rdMolTransforms.TransformConformer(poly.molecule.GetConformer(0), transform.transform(dx - poly.center_of_mass.coordinate.x,dy- poly.center_of_mass.coordinate.y,0,drot))
-    rdMolTransforms.TransformConformer(poly.molecule.GetConformer(0), transform.transform(dx,dy,0,drot))
+    rdMolTransforms.TransformConformer(poly.molecule.GetConformer(0), transform.transform(dx - poly.center_of_mass.coordinate.x,dy- poly.center_of_mass.coordinate.y,0,drot))
+    # rdMolTransforms.TransformConformer(poly.molecule.GetConformer(0), transform.transform(dx,dy,0,drot))
     # print(f"poly transform {(dx - poly.center_of_mass.coordinate.x)=} {(dy - poly.center_of_mass.coordinate.y)=}")
     # rdMolTransforms.TransformConformer(graphene.molecule.GetConformer(0), transform.transform( - graphene.center_of_mass.coordinate.x, - graphene.center_of_mass.coordinate.y,0,0))
-    
+    # poly.create()
+    # polymol = Molecule(poly.atoms,poly.rings,poly.center_of_mass,poly.bonds_ids,False)
+    # polymol.draw(ax)
     poly_name = poly.file_path.split(".")[-2].split("/")[-1]
     newFileName = f"{current_folder_name}/{poly_name}_final_{datetime.now().strftime('%d_%m_%Y-%H_%M_%S')}.sdf"
     writer = Chem.SDWriter(newFileName)
@@ -85,9 +103,10 @@ class MolFile:
         Takes file_path (path of the mol file) as parameter.
     '''
 
-    def __init__(self, file_path: str, **kwargs):
+    def __init__(self, file_path: str, isGraphene, **kwargs):
         self.file_path = file_path
         self.kwargs = kwargs
+        self.isGraphene = isGraphene
         self.expected_distance = self.kwargs["expected_distance"]
         self.tolerance = self.kwargs["tolerance"]
 
@@ -100,13 +119,14 @@ class MolFile:
         self.total_atoms = self.molecule.GetNumAtoms()
 
         self.molecule_conformer = self.molecule.GetConformer()
-        self.atoms_positions = self.molecule_conformer.GetPositions()
-        self.rdkit_rings = list(Chem.GetSymmSSSR(self.molecule))
+        self.bonds = self.molecule.GetBonds()
+        self.bonds_ids = [(b.GetBeginAtomIdx(),b.GetEndAtomIdx(),convertBondType(b.GetBondTypeAsDouble())) for b in self.bonds]
 
         self.create()
-
+    
     def create(self):
-
+        self.atoms_positions = self.molecule_conformer.GetPositions()
+        self.rdkit_rings = list(Chem.GetSymmSSSR(self.molecule))
         self.atoms = [
             Atom(
                 atom_id,
@@ -133,7 +153,7 @@ class MolFile:
         ]
 
         self.rings = [
-            Ring(ring_id, ring_atoms, **self.kwargs) for ring_id, ring_atoms in enumerate(self.atoms_of_rings)
+            Ring(ring_id, ring_atoms, self.bonds, self.isGraphene, **self.kwargs) for ring_id, ring_atoms in enumerate(self.atoms_of_rings)
         ]
 
         self.center_of_mass = DummyAtom(
@@ -142,8 +162,8 @@ class MolFile:
                   self.atoms_mass).T)/sum(self.atoms_mass), **self.kwargs),
             **self.kwargs
         )
+        self.prepare()
 
-        # self.prepare()
 
     def prepare(self):
         # we do not know how the molecule is positioned initially
@@ -151,7 +171,7 @@ class MolFile:
         # TODO: consider implementing this function in Molecule class not MolFile
         # TODO: handle rotation
 
-        for atom_index, atom in enumerate(self.atoms):
+        for atom in self.atoms:
             atom.coordinate -= self.center_of_mass.coordinate
 
         for ring in self.rings:
@@ -159,22 +179,26 @@ class MolFile:
             for ring_atom in ring.atoms:
                 ring_atom.coordinate -= self.center_of_mass.coordinate
             ring.calculate()
-
+        self.center_of_mass.coordinate = Point(0,0,0,0)
 
 class Molecule:
-    def __init__(self, atoms, rings, center_of_mass) -> None:
+    def __init__(self, atoms, rings, center_of_mass,bonds_ids, makeCenter=False) -> None:
         self.atoms = atoms
         self.rings = rings
         self.center_of_mass = center_of_mass
+        self.bonds_ids = bonds_ids
+        self.makeCenter = makeCenter
 
-        for atom_index, atom in enumerate(self.atoms):
-            atom.coordinate -= self.center_of_mass.coordinate
+        # if self.makeCenter:
+        #     for atom in self.atoms:
+        #         atom.coordinate -= self.center_of_mass.coordinate
 
-        for ring in self.rings:
+        #     for ring in self.rings:
 
-            for ring_atom in ring.atoms:
-                ring_atom.coordinate -= self.center_of_mass.coordinate
-            ring.calculate()
+        #         for ring_atom in ring.atoms:
+        #             ring_atom.coordinate -= self.center_of_mass.coordinate
+        #         ring.calculate()
+        #     self.center_of_mass.coordinate = Point(0,0,0,0)
 
     def translation(self, axis, delta):
         ''' apply translation '''
@@ -191,7 +215,6 @@ class Molecule:
         new_center_of_mass = deepcopy(self.center_of_mass)
         for atom in new_atoms:
             atom.coordinate += translation_point
-
         for ring in new_rings:
 
             for ring_atom in ring.atoms:
@@ -199,7 +222,8 @@ class Molecule:
             ring.calculate()
         
         new_center_of_mass.coordinate += translation_point
-        return Molecule(new_atoms, new_rings, new_center_of_mass)
+        newmolecule = Molecule(new_atoms, new_rings, new_center_of_mass,self.bonds_ids,False)
+        return newmolecule
 
     def rotation(self, rotation_point: Point, rotation_axis, rotation_angle):
         ''' rotates the molecule in given axis by a rotation angle around a point.'''
@@ -234,7 +258,7 @@ class Molecule:
                 self.center_of_mass.coordinate.point_id,
                 *np.matmul(rotation_matrix, (self.center_of_mass.coordinate - rotation_point).to_list().T)
             )
-        return Molecule(new_atoms, new_rings,new_center_of_mass)
+        return Molecule(new_atoms, new_rings,new_center_of_mass,self.bonds_ids,False)
 
     def translation2d(self, translation_range, delta):
 
@@ -258,7 +282,7 @@ class Molecule:
         rotation_count = Fraction(str(float(rotation_range))) // Fraction(str(float(rdelta))) + 1
 
         tr_molecules = []
-
+        # initialtrans = self.translation("y",0)
         for ydelta in range(translation_count):
             ydist = tdelta * ydelta
             ytranslation = self.translation("y", ydist)
@@ -266,10 +290,11 @@ class Molecule:
             for xdelta in range(translation_count):
                 xdist = tdelta * xdelta
                 xtranslation = ytranslation.translation("x", xdist)
-                
-                for r in range(rotation_count):
-                    rotation_angle = rdelta * r
+                # xtranslation = ytranslation.translation("x", 0)
+                for rd in range(rotation_count):
+                    rotation_angle = rdelta * rd
                     zrotation = xtranslation.rotation(self.center_of_mass.coordinate, "z", rotation_angle)
+                    # zrotation = xtranslation.rotation(self.center_of_mass.coordinate, "z", 0)
                     tr_molecules.append([(xdist, ydist, rotation_angle), zrotation])
 
         return tr_molecules
@@ -351,6 +376,32 @@ class Molecule:
         final_best += best[0]
         return final_best, self.rotation(center, "z", final_best)
 
+    def recursiveBestTransform(self,graphene,center,trange,rrange,dr,delta,recursion_size):
+        # translation and rotation
+        temp_molecule = self.translation("x", 0)
+        final_best = [0, 0, 0]
+        final_best_rot = 0
+        for r in range(recursion_size):
+            best = temp_molecule.getBestTranslation(graphene, trange, dr)
+            best_rot = temp_molecule.getBestRotation(graphene, center, rrange, delta)
+            temp_molecule = self.translation(
+                "x", best[0][0] - dr/2).translation("y", best[0][1] - dr/2).rotation(center, "z", best_rot[0] - delta/2)
+            
+            
+            final_best[0] += best[0][0] - dr/2
+            final_best[1] += best[0][1] - dr/2
+            final_best[2] += best_rot[0] - delta/2
+            rrange /= 10
+            delta /= 10
+
+            trange /= 10
+            dr /= 10
+
+        final_best[0] += best[0][0]
+        final_best[1] += best[0][1]
+        final_best[1] += best_rot[0]
+
+        return final_best, self.translation("x", final_best[0]).translation("y", final_best[1]).rotation(center, "z", final_best[2])
     def centerAtomsDist(self, graphene):
         ''' returns the miniumum distances of center of mass of rings to graphene atoms.'''
 
@@ -385,7 +436,7 @@ class Atom:
         self.kwargs = kwargs
 
     def __repr__(self):
-        return f"Atom: {self.atom_id}, {self.symbol}"
+        return f"Atom: {self.atom_id}, {self.symbol}, {self.coordinate}"
 
     def draw(self, ax, atom_color="red"):
         ax.scatter(*self.coordinate.to_list(), c=atom_color)
@@ -400,11 +451,26 @@ class DummyAtom(Atom):
 
 
 class Ring:
-    def __init__(self, ring_id: int, atoms: list, **kwargs):
+    def __init__(self, ring_id: int, atoms: list, bonds, isGraphene = False, **kwargs):
         self.ring_id = ring_id
         self.atoms = atoms
+        self.bonds = bonds
+        self.isGraphene = isGraphene
         self.kwargs = kwargs
         self.calculate()
+        if not self.isGraphene:
+            self.aromatic = self.isAromatic()
+            print(self.aromatic)
+    
+    def isAromatic(self):
+        # print(self.atoms)
+        atomids = list(map(lambda x: x.atom_id,self.atoms))
+        for b in self.bonds:
+            s,e = b.GetBeginAtomIdx(),b.GetEndAtomIdx()
+            if s in atomids and e in atomids and not b.GetIsAromatic():
+                return False
+        return True
+
 
     def calculate(self):
 
